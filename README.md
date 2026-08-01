@@ -1,3 +1,13 @@
+# Atlas-OctoUI
+
+**A fork of Atlas-CFM, restyled for [OctoUI](https://github.com/C4rcer/OctoUI) on OctoWoW.**
+Licensed GPL-2.0-or-later, unchanged from upstream. Lineage, copyright and a list of
+changes are in [FORK.md](FORK.md).
+
+The original documentation follows, and still describes how the addon works.
+
+---
+
 # Atlas‑CFM — Documentation (WoW 1.12)
 
 Overview: Atlas‑CFM is a dungeon map browser with an integrated loot panel and quests module. It is compatible with World of Warcraft 1.12 and includes localization support.
