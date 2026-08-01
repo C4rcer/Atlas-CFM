@@ -7,9 +7,14 @@ This addon is a fork of **Atlas-CFM**, restyled to match
 
 | | |
 |---|---|
-| **Atlas** | Dan Gilbert, map by Niflheim — the original addon this line descends from |
+| **Atlas** | Dan Gilbert, map by Niflheim — the original addon this line descends from, still credited in the corner of every map |
+| **Atlas-TW** | [github.com/byCFM2/Atlas-TW](https://github.com/byCFM2/Atlas-TW) — the `upstream` remote of this repository |
 | **Atlas-CFM** | CFM — [github.com/byCFM2/Atlas-CFM](https://github.com/byCFM2/Atlas-CFM), v1.60, the direct parent of this fork |
 | **Atlas-OctoUI** | this fork |
+
+The full upstream history is preserved in this repository rather than squashed, so every
+change made here can be diffed against the original. `7a06bad` is the first commit of the
+fork; anything before it is upstream's.
 
 Copyright in the original work remains with its authors. This fork adds to it; it
 does not replace their claim to it.

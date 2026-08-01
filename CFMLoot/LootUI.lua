@@ -487,7 +487,7 @@ local function AtlasCFMLoot_CreateSearchElements(frame)
     end)
 
     -- Search Button
-    local searchButton = CreateFrame("Button", nil, searchBox, "OptionsButtonTemplate")
+    local searchButton = CreateFrame("Button", "AtlasCFMLootSearchButton", searchBox, "OptionsButtonTemplate")
     searchButton:SetWidth(55)
     searchButton:SetPoint("LEFT", searchBox, "RIGHT", 2, 0)
 
@@ -506,7 +506,7 @@ local function AtlasCFMLoot_CreateSearchElements(frame)
     end)
 
     -- Search Options Button
-    local searchOptionsButton = CreateFrame("Button", nil, searchButton)
+    local searchOptionsButton = CreateFrame("Button", "AtlasCFMLootSearchOptionsButton", searchButton)
     searchOptionsButton:SetWidth(28)
     searchOptionsButton:SetHeight(28)
     searchOptionsButton:SetPoint("LEFT", searchButton, "RIGHT", -2, 0)
@@ -525,7 +525,7 @@ local function AtlasCFMLoot_CreateSearchElements(frame)
     end)
 
     -- Clear Button
-    local clearButton = CreateFrame("Button", nil, searchBox, "OptionsButtonTemplate")
+    local clearButton = CreateFrame("Button", "AtlasCFMLootClearButton", searchBox, "OptionsButtonTemplate")
     clearButton:SetWidth(58)
     clearButton:SetPoint("LEFT", searchOptionsButton, "RIGHT", -2, 0)
 
@@ -541,7 +541,7 @@ local function AtlasCFMLoot_CreateSearchElements(frame)
     end)
 
     -- Last Result Button
-    local lastResultButton = CreateFrame("Button", nil, searchBox, "OptionsButtonTemplate")
+    local lastResultButton = CreateFrame("Button", "AtlasCFMLootLastResultButton", searchBox, "OptionsButtonTemplate")
     lastResultButton:SetPoint("LEFT", clearButton, "RIGHT", 0, 0)
 
     lastResultButton:SetScript("OnShow", function()
@@ -558,7 +558,7 @@ local function AtlasCFMLoot_CreateSearchElements(frame)
     end)
 
     -- WishList Button
-    local wishListButton = CreateFrame("Button", nil, frame, "OptionsButtonTemplate")
+    local wishListButton = CreateFrame("Button", "AtlasCFMLootWishListButton", frame, "OptionsButtonTemplate")
     wishListButton:SetPoint("RIGHT", searchBox, "LEFT", -7, 0)
 
     wishListButton:SetScript("OnClick", function()
