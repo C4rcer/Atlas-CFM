@@ -16,4 +16,6 @@
 	<Include file="AtlasOptions.lua"/>
 	<Include file="AtlasVersion.lua"/>
 	<Include file="AtlasMapMarkers.lua"/>
+	<!-- Last: it styles frames the files above create. -->
+	<Include file="AtlasOctoStyle.lua"/>
 </Ui>

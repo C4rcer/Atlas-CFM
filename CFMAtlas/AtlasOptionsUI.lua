@@ -314,7 +314,7 @@ do
     lastElement = UpdateAtlasSliders(lastElement)
 
     -- Reset position button
-    local resetPosition = CreateFrame("Button", nil, optionsFrame, "OptionsButtonTemplate")
+    local resetPosition = CreateFrame("Button", "AtlasCFMOptionsResetPositionButton", optionsFrame, "OptionsButtonTemplate")
     resetPosition:SetPoint("BOTTOMLEFT", 20, 15)
     resetPosition:SetWidth(120)
     resetPosition:SetText(L["Reset Position"])
@@ -323,7 +323,7 @@ do
     end)
 
     -- Default settings button
-    local defaultSettingsButton = CreateFrame("Button", nil, resetPosition, "OptionsButtonTemplate")
+    local defaultSettingsButton = CreateFrame("Button", "AtlasCFMOptionsDefaultSettingsButton", resetPosition, "OptionsButtonTemplate")
     defaultSettingsButton:SetPoint("RIGHT", 150, 0)
     defaultSettingsButton:SetWidth(140)
     defaultSettingsButton:SetText(L["Reset Settings"])
@@ -331,7 +331,7 @@ do
         AtlasCFM.OptionDefaultSettings()
     end)
     -- Done button
-    local doneButton = CreateFrame("Button", nil, optionsFrame, "OptionsButtonTemplate")
+    local doneButton = CreateFrame("Button", "AtlasCFMOptionsDoneButton", optionsFrame, "OptionsButtonTemplate")
     doneButton:SetPoint("BOTTOMRIGHT", -20, 15)
     doneButton:SetText(L["Done"])
     doneButton:SetScript("OnClick", function()

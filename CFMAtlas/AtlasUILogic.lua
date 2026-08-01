@@ -42,6 +42,8 @@ end
 --- @usage AtlasCFM.MinimapButtonInit() -- Called during addon initialization
 ---
 function AtlasCFM.MinimapButtonInit()
+	AtlasCFM.EnsureOptions()
+
 	if AtlasCFMOptions.AtlasButtonShown then
 		AtlasCFMButtonFrame:Show()
 	else

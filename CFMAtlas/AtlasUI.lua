@@ -236,7 +236,7 @@ do
     end)
 
     -- Search button
-    local searchButton = CreateFrame("Button", nil, searchBox, "OptionsButtonTemplate")
+    local searchButton = CreateFrame("Button", "AtlasCFMSearchButton", searchBox, "OptionsButtonTemplate")
     searchButton:SetWidth(70)
     searchButton:SetPoint("LEFT", searchBox, "RIGHT", 1, 0)
     searchButton:SetText(L["Search"])
@@ -247,7 +247,7 @@ do
     end)
 
     -- Clear button
-    local clearButton = CreateFrame("Button", nil, searchBox, "OptionsButtonTemplate")
+    local clearButton = CreateFrame("Button", "AtlasCFMClearButton", searchBox, "OptionsButtonTemplate")
     clearButton:SetWidth(70)
     clearButton:SetPoint("LEFT", searchButton, "RIGHT", 0, 0)
     clearButton:SetText(L["Clear"])
@@ -259,7 +259,7 @@ do
     end)
 
     -- Options button
-    local optionsButton = CreateFrame("Button", nil, atlasFrame, "OptionsButtonTemplate")
+    local optionsButton = CreateFrame("Button", "AtlasCFMOptionsButton", atlasFrame, "OptionsButtonTemplate")
     optionsButton:SetWidth(80)
     optionsButton:SetPoint("TOPRIGHT", -10, -60)
     optionsButton:SetText(L["Options"])
@@ -267,7 +267,7 @@ do
         AtlasCFM.OptionsOnClick()
     end)
     -- Hide Quests button
-    local questsToggleButton = CreateFrame("Button", nil, atlasFrame, "OptionsButtonTemplate")
+    local questsToggleButton = CreateFrame("Button", "AtlasCFMQuestsToggleButton", atlasFrame, "OptionsButtonTemplate")
     questsToggleButton:SetPoint("LEFT", optionsButton, -90, 0)
     questsToggleButton:SetText(L["Quests"])
     questsToggleButton:SetScript("OnClick", function()
@@ -275,7 +275,7 @@ do
     end)
 
     -- Hide Loot Panel button
-    local ShowPanelButton = CreateFrame("Button", nil, atlasFrame, "OptionsButtonTemplate")
+    local ShowPanelButton = CreateFrame("Button", "AtlasCFMShowPanelButton", atlasFrame, "OptionsButtonTemplate")
     ShowPanelButton:SetText(L["Loot Panel"])
     ShowPanelButton:SetPoint("LEFT", questsToggleButton, -90, 0)
     ShowPanelButton:SetScript("OnClick", function()

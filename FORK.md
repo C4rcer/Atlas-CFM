@@ -45,7 +45,48 @@ Three consequences worth stating plainly, because they are easy to trip over:
   so removing it turns those into no-ops rather than breaking them. The
   `AtlasCFMOptionPfUI` checkbox is created in `AtlasOptionsUI.lua`, survives, and
   already hides itself when pfUI is absent.
-- Restyled to match OctoUI. *(In progress — see the commit history for detail.)*
+- `AtlasCFM.Name` in `CFMAtlas/AtlasConfig.lua` changed to `Atlas-OctoUI`. It doubles as
+  the folder name, so leaving it stale made `GetAddOnMetadata(Name, "Version")` return nil
+  — which crashed the load banner — and stopped the `ADDON_LOADED` comparison in
+  `Atlas.lua` from ever matching. It is also the display name, so the rebrand comes free.
+- Added `AtlasCFM.EnsureOptions()` and called it from `MinimapButtonInit` and the two map
+  marker entry points. Those fire on `VARIABLES_LOADED` and `PLAYER_ENTERING_WORLD`, both
+  of which can beat the addon's own defaults being written, and each indexed
+  `AtlasCFMOptions` directly. **This is an upstream bug, not one the fork introduced** —
+  it is simply invisible whenever a saved variables file already exists. Upstream already
+  works around it in three places in `ProfessionHooks.lua` with
+  `if not AtlasCFMOptions then AtlasCFMOptions = {} end`; this does the same thing with
+  real defaults, in one place.
+- **Named thirteen previously anonymous buttons.** The search cluster in
+  `CFMLoot/LootUI.lua` (Search, Search Options, Clear, Last Result, WishList), the main
+  window's buttons in `CFMAtlas/AtlasUI.lua` (Search, Clear, Options, Quests toggle, Show
+  Panel) and the options window's three in `CFMAtlas/AtlasOptionsUI.lua` were all
+  `CreateFrame("Button", nil, ...)`. Without a global name nothing outside the function
+  that built them can reach them — which is why skinning this addon from OctoUI could
+  never touch the bottom bar. Names only; no behaviour changed.
+- **Added `CFMAtlas/AtlasOctoStyle.lua`**, loaded last, replacing the pfUI layer that was
+  removed. Applies OctoUI's templates to every window, button, edit box, check box and
+  slider by name. It no-ops if OctoUI is absent, so the addon still runs standalone —
+  just unstyled.
+
+  `AtlasCFMFrame` is deliberately excluded from the window backdrops: the map is a
+  BACKGROUND texture on that frame, so a backdrop drawn on it covers and dims the map.
+  The five edge frames carry the window art and are stripped instead. Item rows get a
+  texcoord trim only — they carry their own icon and text and look wrong in a button
+  backdrop. Each widget is styled inside its own `pcall`, so one that cannot take a skin
+  costs itself and not everything after it in the list.
+
+## Note for anyone renaming this addon again
+
+**Saved variables are stored per addon NAME, not per variable name.** Keeping
+`AtlasCFMOptions` and `AtlasCFMCharDB` in the TOC preserves nothing on its own — WoW looks
+for `WTF/Account/<ACCOUNT>/SavedVariables/<AddonName>.lua`, so a rename orphans the old
+file and the next login is a first run. Copy both files across, with the game fully closed:
+
+```
+WTF/Account/<ACCOUNT>/SavedVariables/Atlas-CFM.lua
+WTF/Account/<ACCOUNT>/<Realm>/<Character>/SavedVariables/Atlas-CFM.lua
+```
 
 ## What is deliberately NOT changed
 

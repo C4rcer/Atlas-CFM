@@ -332,6 +332,8 @@ local function BuildZoneIndex()
 end
 
 function AtlasCFM.MapMarkers.UpdateMarkers()
+    AtlasCFM.EnsureOptions()
+
     if not AtlasCFMOptions.ShowMapMarkers then
         ClearMarkers()
         return
@@ -392,6 +394,8 @@ frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 
 frame:SetScript("OnEvent", function()
     if event == "PLAYER_ENTERING_WORLD" then
+        AtlasCFM.EnsureOptions()
+
         if AtlasCFMOptions.ShowMapMarkers == nil then
             AtlasCFMOptions.ShowMapMarkers = true
         end

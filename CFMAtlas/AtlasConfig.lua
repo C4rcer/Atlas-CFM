@@ -91,7 +91,30 @@ AtlasCFM = {
 
     --variables
     --atlas
-    Name = "Atlas-CFM",
+    --Doubles as the folder name, so it has to match: GetAddOnMetadata(Name, "Version")
+    --returns nil otherwise, and the ADDON_LOADED comparison in Atlas.lua never matches.
+    Name = "Atlas-OctoUI",
+    --Ensures AtlasCFMOptions exists before anything reads a field off it.
+    --
+    --Several consumers -- MinimapButtonInit on VARIABLES_LOADED, the map marker handler
+    --on PLAYER_ENTERING_WORLD -- index it directly, and nothing guarantees the defaults
+    --have been written by the time those fire. With a saved variables file present the
+    --race is invisible; on a genuinely fresh profile every one of them raises. Renaming
+    --the addon produced exactly that, because saved variables are stored per addon NAME,
+    --so the rename orphaned the old file and the next login was a first run.
+    --
+    --Upstream already does `if not AtlasCFMOptions then AtlasCFMOptions = {} end` in
+    --three places in ProfessionHooks.lua; this is the same idea with real defaults
+    --instead of an empty table, in one place.
+    EnsureOptions = function()
+        if AtlasCFMOptions then return end
+
+        if AtlasCFM and AtlasCFM.OptionDefaultSettings then
+            AtlasCFM.OptionDefaultSettings()
+        end
+
+        AtlasCFMOptions = AtlasCFMOptions or {}
+    end,
     Version = nil,
     DropDowns = {},
     CurrentLine = 0,
