@@ -37,7 +37,9 @@ local QUEST_ITEM_POSITIONS = {
 }
 
 -- Main container frame
-local frameMain = CreateFrame("Frame", "", AtlasCFMFrame)
+--Named for the same reason as AtlasCFMQuestFrame in QuestUI.lua: an empty name is
+--unreachable by the styling layer.
+local frameMain = CreateFrame("Frame", "AtlasCFMQuestInAtlasFrame", AtlasCFMFrame)
 frameMain:SetHeight(FRAME_HEIGHT)
 frameMain:SetWidth(FRAME_WIDTH)
 frameMain:SetPoint(unpack(FRAME_POINT))

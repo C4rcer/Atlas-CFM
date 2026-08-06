@@ -851,7 +851,13 @@ local function AtlasCFMLoot_CreateItemsFrame()
     local quickLooksButton = CreateFrame("Button", "AtlasCFMLootQuickLooksButton", frame)
     quickLooksButton:SetWidth(32)
     quickLooksButton:SetHeight(32)
-    quickLooksButton:SetPoint("BOTTOM", frame, "BOTTOM", -20, 5)
+    --Anchored to the label instead of a second independent offset from the frame's bottom.
+    --The label is 200 wide and right-justified at BOTTOM -130, so its text ends at -30,
+    --while this button sat at BOTTOM -20 and is 25 wide once the skin shrinks it: it began
+    --2.5 units left of where the text ended and covered the last character. Two magic
+    --numbers measured from the same point will always drift into each other like that;
+    --anchoring to the label means the gap is the gap whatever either of them does.
+    quickLooksButton:SetPoint("LEFT", quickLooks, "RIGHT", 6, -3)
     quickLooksButton:Hide()
 
     quickLooksButton:SetNormalTexture("Interface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up")

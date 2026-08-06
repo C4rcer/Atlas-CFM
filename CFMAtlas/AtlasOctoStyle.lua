@@ -31,6 +31,8 @@ local _G = _G
 local getn = table.getn
 local pcall = pcall
 local unpack = unpack
+local ipairs = ipairs
+local find = string.find
 
 --Collected and reported once rather than raising. A widget that cannot be styled should
 --cost that widget, not every widget after it in the list.
@@ -54,8 +56,19 @@ end
 local function SkinButton(frame)
 	if frame:GetObjectType() ~= "Button" or frame.template or frame.isSkinned then return end
 
-	local text = frame.GetText and frame:GetText()
-	if text and text ~= "" then
+	--Discriminated on whether the button HAS a label, not on whether that label currently
+	--says anything.
+	--
+	--GetText() was the earlier test and it is wrong for anything whose caption is filled in
+	--after this runs -- which is most of the loot panel, built when a table is first
+	--browsed. Those buttons read as empty at skin time, took the icon branch, and ended up
+	--with a backdrop UNDER their original red art instead of having it stripped. That is
+	--the "half skinned" look: new backdrop, old texture still on top.
+	--
+	--GetFontString() answers the question that actually matters, because a labelled button
+	--owns its FontString from creation whether or not any text has been set on it yet.
+	local fontString = frame.GetFontString and frame:GetFontString()
+	if fontString then
 		S:HandleButton(frame)
 		return
 	end
@@ -67,7 +80,12 @@ local function SkinButton(frame)
 
 	E:CreateBackdrop(frame, "Default", true)
 	E:StyleButton(frame)
-	frame.isSkinned = true
+
+	--Only claimed as finished when there was actually an icon to keep. A button with
+	--neither a label nor a texture is one this pass could not classify, so it is left
+	--unflagged and the next pass -- on the next show -- gets another go at it once the
+	--addon has finished building it.
+	if normal then frame.isSkinned = true end
 end
 
 --AtlasCFMFrame is handled separately by StyleMainWindow below, NOT here, and it must never
@@ -76,6 +94,16 @@ end
 --them. It would erase the map outright.
 local windows = {
 	"AtlasCFMLootItemsFrame", "AtlasCFMLootPanel", "AtlasCFMOptionsFrame"
+}
+
+--The quest windows, newly named in CFMQuest/QuestUI.lua and QuestUIinAtlas.lua.
+--
+--Kept apart from `windows` because these get the template WITHOUT E:StripTextures. They
+--carry their own artwork -- the faction crest among it -- and stripping would take that
+--with the Blizzard border. Whether the crest should stay is a separate question from
+--whether the frame matches; this fixes the frame and leaves the art alone.
+local plainWindows = {
+	"AtlasCFMQuestFrame", "AtlasCFMQuestInAtlasFrame"
 }
 
 local edges = {
@@ -99,13 +127,43 @@ local buttons = {
 	"AtlasCFMOptionsDoneButton",
 	--already named upstream
 	"AtlasCFMSwitchButton", "AtlasCFMLockButton", "AtlasCFMInstanceTypeButton",
-	"AtlasCFMCraftCollapseAll", "AtlasCFMLootFilterButton", "AtlasCFMLootQuickLooksButton",
+	"AtlasCFMCraftCollapseAll", "AtlasCFMLootFilterButton",
 	"AtlasCFMLootItemsFrame_BACK", "AtlasCFMLootItemsFrame_Back",
-	"AtlasCFMLootItemsFrame_NEXT", "AtlasCFMLootItemsFrame_PREV",
 	"AtlasCFMLootPanel_WorldEvents", "AtlasCFMLootPanel_Sets",
 	"AtlasCFMLootPanel_Reputation", "AtlasCFMLootPanel_PvP",
 	"AtlasCFMLootPanel_Crafting", "AtlasCFMLootPanel_Dungeons",
 	"AtlasCFMLootPanel_Instances"
+}
+
+--[[
+	Page-turn arrows, which need their own handler rather than the icon branch of
+	SkinButton.
+
+	All of these carry Blizzard's spellbook page art -- UI-SpellbookIcon-NextPage-Up and
+	friends, applied by AtlasCFMLoot_ApplyNavigationButtonTemplate in CFMLoot/LootUI.lua.
+	Treated as ordinary icon buttons they keep that gold art and merely gain a backdrop
+	behind it, which is why they stayed obviously Blizzard while everything around them
+	went dark. S:HandleNextPrevButton REPLACES the art with OctoUI's own arrow, which is
+	the same treatment TradeSkill.lua gives TradeSkillDecrementButton.
+
+	The names are built as `frame:GetName() .. "_PREV"` / `"_NEXT"` at LootUI.lua:970-988.
+]]
+local nextPrevButtons = {
+	"AtlasCFMLootItemsFrame_PREV", "AtlasCFMLootItemsFrame_NEXT",
+	"AtlasCFMLootSearchOptionsButton"
+}
+
+--Buttons that open something below them rather than paging sideways, so they get the same
+--square-button art pointing DOWN. HandleNextPrevButton's second argument is useVertical;
+--the third is inferred from the name and only matters for prev/left/decrement, none of
+--which these are, so `true` alone gives a down arrow.
+--
+--QuickLooks carried a bespoke icon that matched nothing else in the addon. Replacing it
+--rather than putting a backdrop behind it is the point: this fork is meant to read as a
+--sister addon to OctoUI, and one widget keeping its own art is what makes an interface
+--look assembled rather than designed.
+local downButtons = {
+	"AtlasCFMLootQuickLooksButton"
 }
 
 --AtlasCFMNoticeBox is excluded: it is the "report it at" URL field, and a backdrop on it
@@ -123,6 +181,63 @@ local checkBoxes = {
 }
 
 local sliders = { "AtlasCFMOptionReagentRowsSlider" }
+
+--[[
+	Everything a name list cannot reach.
+
+	Most of this UI's buttons are created as CreateFrame("Button", nil, parent, ...) --
+	no global name at all -- so _G[name] finds nothing and Apply skips them in silence.
+	That is why the bottom bar stayed Blizzard-red while the named buttons above went dark:
+	not an error, just a lookup that could never succeed. Walking GetChildren() is the only
+	thing that reaches them.
+
+	SkinButton already refuses anything carrying a texture instead of a label, so an icon
+	button walked into here keeps its art and gets a backdrop rather than being stripped
+	to an empty box.
+
+	Loot rows are excluded by name. They carry their own icon and text and look wrong inside
+	a button backdrop -- StyleRows gives them a texcoord trim and nothing else. The pattern
+	requires a DIGIT after the prefix so AtlasCFMLootItemsFrame, which shares the first
+	sixteen characters with AtlasCFMLootItem1, is still descended into.
+]]
+local ROW_PATTERNS = {
+	"^AtlasCFMLootItem%d", "^AtlasCFMLootMenuItem%d", "^AtlasCFMLootContainerItem%d"
+}
+
+local function IsRowWidget(name)
+	if not name then return false end
+	for i = 1, getn(ROW_PATTERNS) do
+		if find(name, ROW_PATTERNS[i]) then return true end
+	end
+	return false
+end
+
+local function SkinChildren(frame, depth)
+	if not frame or not frame.GetChildren then return end
+
+	local kids = {frame:GetChildren()}
+	for i = 1, getn(kids) do
+		local child = kids[i]
+		if child and child.GetObjectType then
+			local objectType = child:GetObjectType()
+			local name = child.GetName and child:GetName()
+
+			if not IsRowWidget(name) then
+				if objectType == "Button" then
+					pcall(SkinButton, child)
+				elseif objectType == "CheckButton" then
+					pcall(S.HandleCheckBox, S, child)
+				elseif objectType == "EditBox" then
+					pcall(S.HandleEditBox, S, child)
+				end
+			end
+
+			--Three deep covers button rows nested in container frames without walking the
+			--whole tree on every show.
+			if depth < 3 then SkinChildren(child, depth + 1) end
+		end
+	end
+end
 
 --Icons only. The rows carry their own icon and text and look wrong inside a button
 --backdrop, so they get a texcoord trim and nothing else.
@@ -149,8 +264,38 @@ function AtlasCFM.OctoStyleDynamic()
 		E:SetTemplate(frame, "Transparent")
 	end)
 
+	Apply(plainWindows, function(frame)
+		if frame:GetObjectType() ~= "Frame" or frame.template then return end
+		E:SetTemplate(frame, "Transparent")
+	end)
+
 	Apply(closeButtons, function(frame) S:HandleCloseButton(frame) end)
+
+	--Before the generic pass and before the child walk, and flagged afterwards. Both of
+	--those would otherwise classify an arrow as an icon button and put E.TexCoords over
+	--the art this just replaced -- the same way the quest frame's faction crests were
+	--being overwritten immediately after being set.
+	Apply(nextPrevButtons, function(frame)
+		if frame.isSkinned then return end
+		S:HandleNextPrevButton(frame)
+		frame.isSkinned = true
+	end)
+
+	Apply(downButtons, function(frame)
+		if frame.isSkinned then return end
+		S:HandleNextPrevButton(frame, true)
+		frame.isSkinned = true
+	end)
+
 	Apply(buttons, SkinButton)
+
+	--After the name list, not instead of it: the named lookups are exact and cheap, and
+	--this only has to catch what they cannot see. Running it second also means anything
+	--already skinned short-circuits on its own isSkinned/template flag.
+	for _, container in ipairs({"AtlasCFMFrame", "AtlasCFMLootPanel", "AtlasCFMLootItemsFrame", "AtlasCFMOptionsFrame"}) do
+		local frame = _G[container]
+		if frame then SkinChildren(frame, 1) end
+	end
 
 	StyleRows("AtlasCFMLootItem")
 	StyleRows("AtlasCFMLootMenuItem")

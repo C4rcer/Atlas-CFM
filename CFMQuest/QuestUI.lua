@@ -23,10 +23,16 @@ local L = (AtlasCFM.Localization and AtlasCFM.Localization.UI) or {}
 -- Constants
 local FRAME_WIDTH = 220
 local FRAME_HEIGHT = 570
-local FRAME_POINT = { "TOP", "AtlasCFMFrame", -556, -30 }
+--Right edge pinned to the main window's left edge, rather than the old "TOP, -556" which
+--was measured from the centre and so drifted into the main frame whenever its width was
+--not exactly what that number assumed. Flush by construction now.
+local FRAME_POINT = { "TOPRIGHT", "AtlasCFMFrame", "TOPLEFT", -6, -30 }
 
 -- Main Frame
-local frame = CreateFrame("Frame", "", AtlasCFMFrame)
+--Named, where it was created with an empty string before. An unnamed frame cannot be
+--reached by _G lookup, which is why the styling layer never touched this window and it
+--kept the stock Blizzard look while everything around it went dark.
+local frame = CreateFrame("Frame", "AtlasCFMQuestFrame", AtlasCFMFrame)
 frame:SetWidth(FRAME_WIDTH)
 frame:SetHeight(FRAME_HEIGHT)
 frame:SetPoint(unpack(FRAME_POINT))
@@ -122,22 +128,49 @@ UI_Main.StoryButton:SetScript("OnClick", function() AtlasCFM.Quest.OnStoryClick(
 UI_Main.StoryButton:SetScript("OnShow", setFrameLevelOnShow)
 
 -- Faction Buttons
-UI_Main.AllianceButton = CreateElement("Button", "", frame, nil, 30, 30, { "TOPLEFT", 25, -25 })
+--[[
+	Both faction buttons now flank the Story button instead of sitting at the frame's outer
+	corners, which is what pushed the Alliance crest into the close button.
+
+	Three things were stacking up. The button was at TOPLEFT 25 while the close button
+	spans 10-37, so they overlapped by twelve units before anything was drawn. Its texture
+	was then 50x50 inside a 30x30 button -- ten units of overhang on every side -- and
+	offset a further +8 to the right, putting the visible crest well over the close button.
+
+	So: anchored to the Story button so the two crests sit either side of the label, texture
+	brought down to 34 so a 30 button is roughly what it looks like, and the offset dropped
+	to centre so the thing is where the button says it is.
+]]
+UI_Main.AllianceButton = CreateElement("Button", "", frame, nil, 30, 30, { "RIGHT", UI_Main.StoryButton, "LEFT", -8, 0 })
 UI_Main.AllianceButton:SetNormalTexture("Interface\\TargetingFrame\\UI-PVP-Alliance")
-UI_Main.AllianceButton:GetNormalTexture():SetWidth(50)
-UI_Main.AllianceButton:GetNormalTexture():SetHeight(50)
+--[[
+	The crest is NOT centred inside UI-PVP-Alliance -- it sits in the upper-left of the
+	file with a lot of empty space around it, which is why the original code used a 50x50
+	texture in a 30x30 button nudged +8,-9: it was dragging the visible art back to the
+	middle by brute force. Cropping to the art is the honest version of that, and it is
+	what vanilla's own frames do with these two textures.
+
+	isSkinned is set deliberately. AtlasOctoStyle's SkinButton applies E.TexCoords to any
+	button it decides is an icon button, and these are children of a frame it now walks --
+	so it was overwriting this crop immediately after it was set, which is why centring
+	them appeared to do nothing at all. The flag makes it skip them.
+]]
 UI_Main.AllianceButton:GetNormalTexture():ClearAllPoints()
-UI_Main.AllianceButton:GetNormalTexture():SetPoint("CENTER", 8, -9)
+UI_Main.AllianceButton:GetNormalTexture():SetAllPoints(UI_Main.AllianceButton)
+UI_Main.AllianceButton:GetNormalTexture():SetTexCoord(0.08, 0.58, 0.045, 0.55)
+UI_Main.AllianceButton.isSkinned = true
 UI_Main.AllianceButton:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
 UI_Main.AllianceButton:SetScript("OnClick", function() AtlasCFM.Quest.OnAllianceClick() end)
 UI_Main.AllianceButton:SetScript("OnShow", setFrameLevelOnShow)
 
-UI_Main.HordeButton = CreateElement("Button", "", frame, nil, 30, 30, { "TOPRIGHT", -25, -25 })
+--Mirror of the Alliance button above, on the other side of Story.
+UI_Main.HordeButton = CreateElement("Button", "", frame, nil, 30, 30, { "LEFT", UI_Main.StoryButton, "RIGHT", 8, 0 })
+--Mirror of the Alliance crest above, including the crop and the isSkinned flag.
 UI_Main.HordeButton:SetNormalTexture("Interface\\TargetingFrame\\UI-PVP-Horde")
-UI_Main.HordeButton:GetNormalTexture():SetWidth(50)
-UI_Main.HordeButton:GetNormalTexture():SetHeight(50)
 UI_Main.HordeButton:GetNormalTexture():ClearAllPoints()
-UI_Main.HordeButton:GetNormalTexture():SetPoint("CENTER", 8, -9)
+UI_Main.HordeButton:GetNormalTexture():SetAllPoints(UI_Main.HordeButton)
+UI_Main.HordeButton:GetNormalTexture():SetTexCoord(0.08, 0.58, 0.045, 0.55)
+UI_Main.HordeButton.isSkinned = true
 UI_Main.HordeButton:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
 UI_Main.HordeButton:SetScript("OnClick", function() AtlasCFM.Quest.OnHordeClick() end)
 UI_Main.HordeButton:SetScript("OnShow", setFrameLevelOnShow)
@@ -150,7 +183,9 @@ UI_Main.QuestButtons = {}
 for i = 1, AtlasCFM.QMAXQUESTS do
     local index = i
     local yOffset = -60 - (i - 1) * 20
-    local button = CreateElement("Button", "", frame, nil, 165, 20, { "TOPLEFT", 15, yOffset })
+    --Centred rather than TOPLEFT 15: the rows are 165 wide in a 220 frame, so a fixed left
+    --margin of 15 left 40 on the right and the whole list sat visibly off to one side.
+    local button = CreateElement("Button", "", frame, nil, 165, 20, { "TOP", 0, yOffset })
     button:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
     button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     button:SetScript("OnClick", function() AtlasCFM.Quest.OnQuestClick(this:GetID(), arg1) end)

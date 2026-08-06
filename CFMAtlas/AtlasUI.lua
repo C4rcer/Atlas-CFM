@@ -90,13 +90,24 @@ do
 
     -- Close button
     local closeButton = CreateFrame("Button", "AtlasCFMCloseButton", atlasFrame, "UIPanelCloseButton")
-    closeButton:SetPoint("TOPRIGHT", 5, -7)
+    --Was +5, which hangs the button five units off the RIGHT edge of its own frame -- the
+    --same sign mistake the lock button had. That overhang is what reads as the close
+    --sitting in a second frame leaking past the window: it is half outside the backdrop.
+    closeButton:SetPoint("TOPRIGHT", atlasFrame, "TOPRIGHT", -6, -6)
 
     -- Lock button
     local lockButton = CreateFrame("Button", "AtlasCFMLockButton", atlasFrame)
     lockButton:SetWidth(32)
     lockButton:SetHeight(32)
-    lockButton:SetPoint("RIGHT", closeButton, "LEFT", 10, 0)
+    --Moved to the top LEFT, away from the close button entirely.
+    --
+    --It used to anchor RIGHT to the close button's LEFT at +10, and a positive offset there
+    --pushes it INTO the close button rather than away, so the two drew on top of each
+    --other. Correcting the sign fixed the overlap but left four things -- lock, close,
+    --version and the notice link -- competing for one corner. The top left is empty, the
+    --lock is not related to closing, and moving it takes the contention away instead of
+    --managing it.
+    lockButton:SetPoint("TOPLEFT", atlasFrame, "TOPLEFT", 10, -7)
     lockButton:SetScript("OnClick", function()
         AtlasCFM.ToggleLock()
     end)
@@ -465,7 +476,20 @@ do
     local noticeBox = CreateFrame("EditBox", "AtlasCFMNoticeBox", atlasFrame, "InputBoxTemplate")
     noticeBox:SetWidth(230)
     noticeBox:SetHeight(16)
-    noticeBox:SetPoint("TOP", 240, -15)
+    --Anchored to the lock button rather than the old "TOP, 240" magic offset, which put a
+    --230-wide box wherever the frame's centre happened to be and ran it under the lock and
+    --close buttons. Pinning the right edge means it cannot reach them whatever the window
+    --width becomes. Falls back to the old placement if the lock button is somehow absent.
+    --Pinned to the close button now that the lock has moved to the top left. The old
+    --"TOP, 240" placed a 230-wide box wherever the frame's centre happened to be and ran it
+    --under whatever was in that corner; anchoring means it cannot reach the close button
+    --whatever the window width becomes.
+    local closeAnchor = _G["AtlasCFMCloseButton"]
+    if closeAnchor then
+        noticeBox:SetPoint("RIGHT", closeAnchor, "LEFT", -8, 0)
+    else
+        noticeBox:SetPoint("TOP", 240, -15)
+    end
     noticeBox:SetMaxLetters(48)
     noticeBox:SetAutoFocus(false)
     noticeBox:SetText(Colors.RED .. L["NoticeLink"])
