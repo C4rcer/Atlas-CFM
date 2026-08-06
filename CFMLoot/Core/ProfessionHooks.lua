@@ -21,9 +21,28 @@ function AtlasCFM.ProfessionHooks.ApplyHooks()
     -- Restore Blizzard original
     TradeSkillFrame_Update = AtlasCFM.ProfessionHooks._blizzardTradeSkillFrame_Update
 
-    if AtlasCFM.ProfessionHooks.IsTurtleLatest() then
+    -- Slot categories need the addon to own the list, because regrouping recipes is not
+    -- something the decorate-in-place path can do -- it only relabels rows the server
+    -- already arranged. So with categories on we take the same list-takeover route the
+    -- non-Turtle branch uses, which the Craft window already proves works on this client.
+    -- TSF.BuildList reads the NATIVE search box and filter checkboxes when Turtle, so
+    -- nothing the client provides stops working.
+    local useCategories = (AtlasCFMOptions and AtlasCFMOptions.TradeSkillCategories) and true or false
+    AtlasCFM.ProfessionHooks.TradeSkillFilter.UseCategories = useCategories
+
+    if AtlasCFM.ProfessionHooks.IsTurtleLatest() and not useCategories then
         local orig = TradeSkillFrame_Update
         TradeSkillFrame_Update = function()
+            -- FauxScrollFrame_GetOffset is `return frame.offset`, and .offset does not
+            -- exist until FauxScrollFrame_Update has run on that scroll frame once.
+            -- Opening a profession while another panel is already up re-enters this
+            -- before that has ever happened -- TradeSkillFrame_Show -> ShowUIPanel ->
+            -- SkillFrame:OnHide -> CancelSkillUps -> TradeSkillRankFrame:OnEvent -- and
+            -- Blizzard's TradeSkillFrame_Update then does arithmetic on the nil it gets
+            -- back. Seed it so the first update behaves like every later one.
+            if TradeSkillListScrollFrame and TradeSkillListScrollFrame.offset == nil then
+                TradeSkillListScrollFrame.offset = 0
+            end
             orig()
             AtlasCFM.ProfessionHooks.OnTradeSkillUpdate_TurtleLatest()
         end
@@ -685,19 +704,177 @@ AtlasCFM.ProfessionHooks.TradeSkillFilter = {
     HaveMaterials = false,
     ImprovesSkill = false,
     ShowSkillLevels = true,
+    UseCategories = false,
+    ExpandedCategories = {},
     List = {}
 }
 
 local TSF = AtlasCFM.ProfessionHooks.TradeSkillFilter
+
+--[[
+    Slot categories for the TradeSkill window.
+
+    The Craft window groups by slot already, from recipe NAMES -- "Enchant Bracer - ..."
+    gives Bracer -- because for enchants the slot is the only thing that separates them.
+    TradeSkill recipes have no such convention, so the slot comes from the crafted item.
+
+    Why it is worth doing: the server's own headers group by item class, so a Tailoring
+    window says "Cloth" over every piece of armour -- true, and useless, since all of it is
+    cloth -- while the actual bolt of cloth sits under "Trade Goods". Grouping by slot says
+    something; grouping by "it is cloth" does not.
+
+    GetItemInfo on this client returns name, link, quality, iLevel, type, subType,
+    stackCount, equipLoc, texture -- equipLoc is the EIGHTH. Confirmed against
+    OctoUI's Modules/Bags/Sort.lua:195, which sorts by it.
+
+    equipLoc is a token like INVTYPE_HEAD, and FrameXML defines a global of that exact
+    name holding the localised label ("Head"). So _G[equipLoc] is the header text, already
+    translated, with no table to maintain.
+
+    Anything with no slot -- bolts, bandages, bags -- falls back to its subType, which is
+    where "Cloth" becomes correct rather than misleading: it lands on the actual cloth.
+]]
+local slotCache = {}
+
+local function TradeSkillCategory(index, skillName)
+    local cached = slotCache[skillName]
+    if cached then return cached end
+
+    local link = GetTradeSkillItemLink(index)
+    if not link then return nil end
+
+    local _, _, itemId = string.find(link, "item:(%d+)")
+    if not itemId then return nil end
+
+    local _, _, _, _, _, subType, _, equipLoc = GetItemInfo(tonumber(itemId))
+
+    --GetItemInfo answers nil for an item the client has not cached yet. Returning nil
+    --rather than falling through to Miscellaneous keeps it out of the cache, so the row
+    --lands in the right group on the next update instead of being wrong permanently.
+    if not subType and not equipLoc then return nil end
+
+    local category
+    if equipLoc and equipLoc ~= "" then
+        category = _G[equipLoc] or equipLoc
+    elseif subType and subType ~= "" then
+        category = subType
+    end
+
+    if category then slotCache[skillName] = category end
+    return category
+end
+
+--Recipe list changed under us, so the crafted items may have too.
+function TSF.WipeCategoryCache()
+    slotCache = {}
+end
+
+function TSF.BuildCategoryList(numNative, searchText, hasMaterials, improvesSkill)
+    --A collapsed native header hides its recipes from GetTradeSkillInfo entirely, so they
+    --cannot be regrouped without expanding everything first. CF.BuildList does the same
+    --for the Craft window. ExpandTradeSkillSubClass is guarded rather than assumed: it is
+    --stock 1.12 FrameXML but is not referenced anywhere else in either codebase, so it has
+    --not been verified on this client. Without it, categories still work -- they just only
+    --see recipes under headers that are already open, which degrades quietly instead of
+    --raising.
+    if type(ExpandTradeSkillSubClass) == "function" then
+        local expandedSomething, safety = true, 0
+        while expandedSomething and safety < 50 do
+            expandedSomething = false
+            numNative = GetNumTradeSkills()
+            for i = 1, numNative do
+                local _, skillType, _, isExpanded = GetTradeSkillInfo(i)
+                if skillType == "header" and not isExpanded then
+                    ExpandTradeSkillSubClass(i)
+                    expandedSomething = true
+                    safety = safety + 1
+                    break
+                end
+            end
+        end
+    end
+
+    numNative = GetNumTradeSkills()
+
+    local grouped, order = {}, {}
+    local misc = L["Miscellaneous"]
+
+    for i = 1, numNative do
+        local skillName, skillType, numAvailable = GetTradeSkillInfo(i)
+        if skillName and skillType ~= "header" then
+            local keep = true
+            if hasMaterials and numAvailable <= 0 then keep = false end
+            if improvesSkill and (skillType == "trivial" or skillType == "used" or skillType == "none") then keep = false end
+            if searchText ~= "" and not string.find(string.lower(skillName), searchText, 1, true) then keep = false end
+
+            if keep then
+                local category = TradeSkillCategory(i, skillName) or misc
+                if not grouped[category] then
+                    grouped[category] = {}
+                    table.insert(order, category)
+                end
+                table.insert(grouped[category],
+                    { isHeader = false, index = i, name = skillName, type = skillType, num = numAvailable })
+            end
+        end
+    end
+
+    --Alphabetical, with Miscellaneous last -- it is the bucket for everything that did not
+    --classify, so it belongs at the bottom rather than under M.
+    local sorted, hasMisc = {}, false
+    for _, category in ipairs(order) do
+        if category == misc then hasMisc = true else table.insert(sorted, category) end
+    end
+    table.sort(sorted)
+    if hasMisc then table.insert(sorted, misc) end
+
+    for _, category in ipairs(sorted) do
+        local expanded = TSF.ExpandedCategories[category]
+        if expanded == nil then expanded = true end
+        --A search that matched inside a collapsed group would otherwise show a header with
+        --nothing under it and no way to tell why.
+        if searchText ~= "" then expanded = true end
+
+        table.insert(TSF.List, { isHeader = true, name = category, expanded = expanded, isCategory = true })
+        if expanded then
+            for _, entry in ipairs(grouped[category]) do
+                table.insert(TSF.List, entry)
+            end
+        end
+    end
+end
 
 function TSF.BuildList()
     TSF.List = {}
     local numNative = GetNumTradeSkills()
     if numNative == 0 then return end
 
-    local searchText = TSF.SearchText or ""
-    local hasMaterials = TSF.HaveMaterials
-    local improvesSkill = TSF.ImprovesSkill
+    local searchText, hasMaterials, improvesSkill
+
+    --On Turtle the client draws its own search box and filter checkboxes and ours are
+    --hidden, so the filter state has to be read off the native widgets or this list
+    --ignores everything the user typed. CF.BuildList does exactly this for the Craft
+    --window; the names differ, hence the fallbacks.
+    if AtlasCFM.ProfessionHooks.IsTurtleLatest() then
+        local searchBox = _G["TradeSkillSearchBox"] or _G["TradeSkillFrameSearchBox"] or _G["TradeSkillFrameEditBox"]
+        searchText = string.lower(searchBox and searchBox:GetText() or "")
+
+        hasMaterials, improvesSkill = false, false
+        local matCheck = _G["TradeSkillMatsCheckButton"] or _G["TradeSkillFrameAvailableFilterCheckButton"]
+        local skillCheck = _G["TradeSkillSkillCheckButton"] or _G["TradeSkillFrameSkillCheckButton"]
+        if matCheck and matCheck:GetChecked() then hasMaterials = true end
+        if skillCheck and skillCheck:GetChecked() then improvesSkill = true end
+    else
+        searchText = TSF.SearchText or ""
+        hasMaterials = TSF.HaveMaterials
+        improvesSkill = TSF.ImprovesSkill
+    end
+
+    if TSF.UseCategories then
+        TSF.BuildCategoryList(numNative, searchText, hasMaterials, improvesSkill)
+        return
+    end
+
     local isFiltering = (searchText ~= "" or hasMaterials or improvesSkill)
 
     local pendingHeader = nil
@@ -784,6 +961,31 @@ function AtlasCFM.ProfessionHooks.OnTradeSkillUpdate_TurtleLatest()
     end
     tradeSkillLevelToggle:SetChecked(AtlasCFMOptions.TradeSkillShowLevels and 1 or nil)
     tradeSkillLevelToggle:Show()
+
+    -- The category toggle has to exist on this path too, not just in TSF.InitUI, or there
+    -- is no way to turn categories ON: this decorate-in-place path is what runs by default
+    -- on Turtle, and TSF.InitUI only runs once the list takeover is installed. Ticking it
+    -- re-runs ApplyHooks, which swaps the renderer -- that is why it does not simply set a
+    -- flag and redraw.
+    local categoryToggle = _G["AtlasCFMTradeSkillCategories"]
+    if not categoryToggle then
+        categoryToggle = CreateFrame("CheckButton", "AtlasCFMTradeSkillCategories", TradeSkillFrame, "UICheckButtonTemplate")
+        categoryToggle:SetWidth(20)
+        categoryToggle:SetHeight(20)
+        categoryToggle:SetScript("OnClick", function()
+            AtlasCFMOptions.TradeSkillCategories = (this:GetChecked() == 1)
+            TSF.WipeCategoryCache()
+            AtlasCFM.ProfessionHooks.ApplyHooks()
+            TradeSkillFrame_Update()
+        end)
+        local categoryToggleText = _G["AtlasCFMTradeSkillCategoriesText"]
+        categoryToggleText:SetText(L["Type"])
+        categoryToggleText:SetFontObject("GameFontHighlightSmall")
+    end
+    categoryToggle:ClearAllPoints()
+    categoryToggle:SetPoint("LEFT", _G["AtlasCFMTradeSkillShowLevelsText"], "RIGHT", 5, 0)
+    categoryToggle:SetChecked(AtlasCFMOptions.TradeSkillCategories and 1 or nil)
+    categoryToggle:Show()
 
     -- Hide custom checkboxes if they exist (e.g. after server switch) — Turtle WoW has native filters
     local tsMatCheck = _G["AtlasCFMTradeSkillHaveMaterials"]
@@ -1060,6 +1262,51 @@ function TSF.InitUI()
     if not AtlasCFMOptions then AtlasCFMOptions = {} end
     showLevelsCheck:SetChecked(AtlasCFMOptions.TradeSkillShowLevels and 1 or nil)
 
+    -- Category toggle, mirroring the Craft window's "Type" box. Kept visible on Turtle:
+    -- this one is ours and the client has no equivalent, unlike the three hidden below.
+    local catCheck = _G["AtlasCFMTradeSkillCategories"]
+    if not catCheck then
+        catCheck = CreateFrame("CheckButton", "AtlasCFMTradeSkillCategories", TradeSkillFrame, "UICheckButtonTemplate")
+        catCheck:SetWidth(20)
+        catCheck:SetHeight(20)
+        catCheck:SetPoint("LEFT", _G["AtlasCFMTradeSkillShowLevelsText"], "RIGHT", 5, 0)
+        catCheck:SetScript("OnClick", function()
+            TSF.UseCategories = (this:GetChecked() == 1)
+            AtlasCFMOptions.TradeSkillCategories = TSF.UseCategories
+            TSF.WipeCategoryCache()
+            if TradeSkillListScrollFrameScrollBar then TradeSkillListScrollFrameScrollBar:SetValue(0) end
+            TradeSkillFrame_Update()
+        end)
+        local catLabel = _G["AtlasCFMTradeSkillCategoriesText"]
+        catLabel:SetText(L["Type"])
+        catLabel:SetFontObject("GameFontHighlightSmall")
+    end
+    catCheck:SetChecked(TSF.UseCategories and 1 or nil)
+
+    -- Category headers are ours and carry no native index, so Blizzard's own OnClick --
+    -- which expands the subclass with this button's id -- would act on id 0. Intercept
+    -- those and toggle our own state instead; everything else falls through untouched.
+    -- Same shape as the Craft window's button hook.
+    local numButtons = TRADE_SKILLS_DISPLAYED
+    while _G["TradeSkillSkill" .. (numButtons + 1)] do numButtons = numButtons + 1 end
+    for i = 1, numButtons do
+        local button = _G["TradeSkillSkill" .. i]
+        if button and not button.atlasCategoryHooked then
+            button.atlasCategoryHooked = true
+            local origOnClick = button:GetScript("OnClick")
+            button:SetScript("OnClick", function()
+                if this:GetID() == 0 and this.catName then
+                    local expanded = TSF.ExpandedCategories[this.catName]
+                    if expanded == nil then expanded = true end
+                    TSF.ExpandedCategories[this.catName] = not expanded
+                    TradeSkillFrame_Update()
+                    return
+                end
+                if origOnClick then origOnClick() end
+            end)
+        end
+    end
+
     -- On Turtle WoW, native TradeSkillFrame already has these filters
     if AtlasCFM.Server and AtlasCFM.Server.GetActive then
         local active = AtlasCFM.Server.GetActive()
@@ -1171,7 +1418,13 @@ function TSF.HookTradeSkillFrameUpdate()
             if itemIndex <= numItems then
                 local data = TSF.List[itemIndex]
                 if data.isHeader then
-                    skillButton:SetID(data.index)
+                    --A category header is ours, not the server's, so it has no native
+                    --index. SetID(nil) raises, and an id of 0 is what the click handler
+                    --keys on to tell the two apart -- same convention the Craft window
+                    --uses. catName is cleared on native headers so a recycled button
+                    --cannot keep a stale one and toggle the wrong group.
+                    skillButton:SetID(data.index or 0)
+                    skillButton.catName = data.isCategory and data.name or nil
                     skillButton.isHeader = true
                     skillButton.isExpanded = data.expanded
                     skillButton:SetNormalTexture("Interface\\Buttons\\UI-MinusButton-Up")
@@ -1185,6 +1438,7 @@ function TSF.HookTradeSkillFrameUpdate()
                     skillButton:Show()
                 else
                     skillButton:SetID(data.index)
+                    skillButton.catName = nil
                     skillButton.isHeader = false
                     skillButton:SetNormalTexture("")
 
@@ -1777,6 +2031,22 @@ function CF.InitUI()
                 end
                 if origOnClick then origOnClick() end
             end)
+        end
+    end
+
+    -- On Turtle WoW the native CraftFrame already has these filters, so ours would be a
+    -- second, worse-labelled copy of controls the client already provides -- and the
+    -- search box's non-pfUI anchor (BOTTOMLEFT + 82) is measured for the stock frame, so
+    -- on the taller native one it lands on top of the recipe list. TSF.InitUI has had
+    -- this guard all along; CF.InitUI never did, which is why only Enchanting showed it.
+    -- RefreshHooks() hides the same three, but only fires on an on-the-fly server change.
+    -- Type and Skill stay: those are ours and the client has no equivalent.
+    if AtlasCFM.Server and AtlasCFM.Server.GetActive then
+        local active = AtlasCFM.Server.GetActive()
+        if active == AtlasCFM.Server.TURTLE or active == AtlasCFM.Server.TURTLE1 then
+            if searchBox then searchBox:Hide() end
+            if matCheck then matCheck:Hide() end
+            if skillCheck then skillCheck:Hide() end
         end
     end
 end
